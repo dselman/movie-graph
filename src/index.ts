@@ -138,7 +138,7 @@ async function addRowToGraph(graphModel: GraphModel, row: ImdbRow) {
       startYear: parseInt(row.startYear),
       endYear: row.endYear ? row.endYear !== "\\N" ? parseInt(row.endYear) : null : null,
       runtimeMinutes: row.runtimeMinutes !== "\\N" ? parseInt(row.runtimeMinutes) : null,
-      summary: row.Plot ? row.Plot.toString() : ''
+      summary: row.Plot ? row.Plot : undefined
     });
     const genres = row.genres.split(',');
     for (let n = 0; n < genres.length; n++) {
@@ -149,7 +149,7 @@ async function addRowToGraph(graphModel: GraphModel, row: ImdbRow) {
       identifier: row.nconst,
       name: row.primaryName,
       primaryProfession: row.primaryProfession,
-      birthYear:  parseInt(row.birthYear),
+      birthYear: parseInt(row.birthYear),
       deathYear: row.deathYear ? row.deathYear !== "\\N" ? parseInt(row.deathYear) : null : null,
     });
     await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Movie', row.tconst, 'movies');
@@ -175,7 +175,7 @@ async function run() {
     NEO4J_USER: process.env.NEO4J_USER,
     NEO4J_PASS: process.env.NEO4J_PASS,
     NEO4J_URL: process.env.NEO4J_URL,
-    // logger: console,
+    logger: console,
     logQueries: false,
     embeddingFunction: process.env.OPENAI_API_KEY ? getOpenAiEmbedding : undefined
   }
@@ -198,44 +198,46 @@ where
   let done = false;
   const rl = readline.createInterface({ input, output });
   while (!done) {
-    const command = await rl.question('Enter command (add,query,delete,chat,quit): ');
-    switch (command) {
-      case 'add': {
-        const actor = await rl.question('Enter the name of a movie participant: ');
-        console.log(`Loading IMDB data for movie participant: ${actor}`);
-        const rows = stmt.all(actor);
-        console.log(`Found ${rows.length} titles.`);
-        for(let n=0; n < rows.length; n++) {
-          await addRowToGraph(graphModel, rows[n]);
+    try {
+      const command = await rl.question('Enter command (add,query,delete,quit) or natural language query: ');
+      switch (command) {
+        case 'add': {
+          const actor = await rl.question('Enter the name of a movie participant: ');
+          console.log(`Loading IMDB data for movie participant: ${actor}`);
+          const rows = stmt.all(actor);
+          console.log(`Found ${rows.length} titles.`);
+          for (let n = 0; n < rows.length; n++) {
+            await addRowToGraph(graphModel, rows[n]);
+          }
+        }
+          break;
+        case 'quit':
+          done = true;
+          break;
+        case 'delete': {
+          await graphModel.deleteGraph();
+          break;
+        }
+        case 'query': {
+          if (process.env.OPENAI_API_KEY) {
+            const search = await rl.question('Enter search string: ');
+            console.log(`Searching for movies related to: '${search}'`);
+            const results = await graphModel.similarityQuery('Movie', 'summary', search, 3);
+            console.log(results);
+          }
+          break;
+        }
+        default: {
+          if (process.env.OPENAI_API_KEY) {
+            const results = await graphModel.chatWithData(command);
+            console.log(JSON.stringify(results, null, 2));
+          }
+          break;
         }
       }
-        break;
-      case 'quit':
-        done = true;
-        break;
-      case 'delete': {
-        await graphModel.deleteGraph();
-        break;
-      }
-      case 'query': {
-        if (process.env.OPENAI_API_KEY) {
-          const search = await rl.question('Enter search string: ');
-          console.log(`Searching for movies related to: '${search}'`);
-          const results = await graphModel.similarityQuery('Movie', 'summary', search, 3);
-          console.log(results);
-        }
-        break;
-      }
-      default: {
-        if (process.env.OPENAI_API_KEY) {
-          const search = await rl.question('Enter natural language query: ');
-          const cypher = await graphModel.textToCypher(search);
-          console.log(`Converted to Cypher query: ${cypher}`);      
-          const results = await graphModel.chatWithData(search);
-          console.log(results);
-        }
-        break;
-      }
+    }
+    catch (err) {
+      console.log(err);
     }
   }
   rl.close();
