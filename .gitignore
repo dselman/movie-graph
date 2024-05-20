@@ -1,3 +1,9 @@
+.DS_Store
+
+#IMDB
+imdb/
+im.db
+
 # Logs
 logs
 *.log

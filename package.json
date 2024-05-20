@@ -37,6 +37,10 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@accordproject/concerto-graph": "unstable"
+    "@accordproject/concerto-graph": "1.1.1-20240520161142",
+    "better-sqlite3": "^10.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "csv-parse": "^5.5.3",
+    "unirest": "^0.6.0"
   }
 }

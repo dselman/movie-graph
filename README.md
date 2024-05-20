@@ -61,7 +61,58 @@ Runtime result:
 ]
 ```
 
+## Install
+
+### Download IMDB Data
+
+Download the following (non-commercial) data sets from [IMDB](https://developer.imdb.com/non-commercial-datasets/):
+- title.basics
+- name.basics
+- title.principals
+- title.ratings
+
+Each file is a zipped tsv (tab-separated-values) file.
+
+### Download Wiki Movie Plots CSV
+
+> Kaggle account is required
+
+https://www.kaggle.com/datasets/jrobischon/wikipedia-movie-plots
+
+
+### Load Data Into SQLite
+
+> Note that on Mac OS X SQLite is installed by default. On other platforms you may have to install it manually.
+
+```
+sqlite3 im.db
+```
+
+Then in the SQLite shell, run the following commands. Run each command separately; some of the commands may take several minutes to complete:
+
+```
+.mode ascii
+.separator "\t" "\n"
+.import ./imdb/title.basics.tsv titles
+.import ./imdb/name.basics.tsv names
+.import ./imdb/title.principals.tsv principals
+.import ./imdb/title.ratings.tsv ratings
+.mode csv
+.import ./imdb/wiki_movie_plots_deduped.csv plots
+
+create index titles_id on titles(tconst);
+create index names_id on names(nconst);
+create index principals_id on principals(tconst);
+create index ratings_id on ratings(tconst);
+create index names_primaryName on names(primaryName);
+create index principals_name on principals(nconst);
+```
+
+You should now have an ±8GB SQLite database containing most of the IMDB data, indexed for retrieval.
+
 ## Environment Variables
+
+Export the following environment variables to your shell.
 
 ### GraphDB
 
@@ -71,3 +122,16 @@ Runtime result:
 
 ### Text Embeddings
 - OPENAI_API_KEY: <optional> the OpenAI API key. If not set embeddings are not computed and written to the agreement graph and similarity search is not possible.
+
+## Running
+
+```
+npm start
+```
+
+Then use the following commands:
+- add: adds all the movies related to a specific person to the graph database
+- delete: deletes all nodes from the graph database
+- query: similarity conceptual search over movie nodes
+- chat: converts natural language queries to graph queries
+- quit: to exit
