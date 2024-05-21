@@ -3,32 +3,21 @@ import { stdin as input, stdout as output } from 'node:process';
 import { GraphModel, GraphModelOptions, getOpenAiEmbedding } from '@accordproject/concerto-graph';
 import Database from 'better-sqlite3';
 
-/*
-{
-  "tconst": "tt5678148",
-  "titleType": "tvSpecial",
-  "primaryTitle": "Sophia Loren: Live from the TCM Classic Film Festival",
-  "originalTitle": "Sophia Loren: Live from the TCM Classic Film Festival",
-  "isAdult": "0",
-  "startYear": "2016",
-  "endYear": "\\N",
-  "runtimeMinutes": "57",
-  "genres": "Documentary",
-  "ordering": "2",
-  "nconst": "nm0000047",
-  "category": "self",
-  "job": "\\N",
-  "characters": "[\"Self - Guest\"]",
-  "averageRating": "8.4",
-  "numVotes": "63",
-  "primaryName": "Sophia Loren",
-  "birthYear": "1934",
-  "deathYear": "\\N",
-  "primaryProfession": "actress,soundtrack",
-  "knownForTitles": "tt0060121,tt0054749,tt0058335,tt0076085"
-}
-*/
+/**
+ * The SQL query that joins across the various tables
+ */
+const SELECT_TITLES_BY_PARTICIPANT = `
+select * from titles 
+    inner join principals on titles.tconst = principals.tconst 
+	  inner join ratings on ratings.tconst = titles.tconst 
+    inner join names on principals.nconst = names.nconst
+    left join plots on titles.primaryTitle = plots.Title and titles.startYear = plots."Release Year"
+where 
+  names.primaryName=?`;
 
+/**
+ * Type for a consolidated result row from SELECT_TITLES_BY_PARTICIPANT
+ */
 type ImdbRow = {
   // titles
   tconst: string,
@@ -101,6 +90,7 @@ concept Movie extends GraphNode {
   o Integer numVotes optional
   o Double[] embedding optional
   @vector_index("embedding", 1536, "COSINE")
+  @fulltext_index
   o String summary optional
   @label("IN_GENRE")
   --> Genre[] genres optional
@@ -184,22 +174,16 @@ async function run() {
   await graphModel.dropIndexes();
   await graphModel.createConstraints();
   await graphModel.createVectorIndexes();
+  await graphModel.createFullTextIndexes();
   const db = new Database('im.db', { readonly: true, fileMustExist: true });
 
-  const stmt = db.prepare(`
-select * from titles 
-    inner join principals on titles.tconst = principals.tconst 
-	  inner join ratings on ratings.tconst = titles.tconst 
-    inner join names on principals.nconst = names.nconst
-    left join plots on titles.primaryTitle = plots.Title and titles.startYear = plots."Release Year"
-where 
-  names.primaryName=?`);
+  const stmt = db.prepare(SELECT_TITLES_BY_PARTICIPANT);
 
   let done = false;
   const rl = readline.createInterface({ input, output });
   while (!done) {
     try {
-      const command = await rl.question('Enter command (add,query,delete,quit) or natural language query: ');
+      const command = await rl.question('Enter command (add,search,query,delete,quit) or a natural language query: ');
       switch (command) {
         case 'add': {
           const actor = await rl.question('Enter the name of a movie participant: ');
@@ -215,13 +199,26 @@ where
           done = true;
           break;
         case 'delete': {
-          await graphModel.deleteGraph();
+          const confirm = await rl.question('Enter \'Y\' to confirm deletion of all data: ');
+          if(confirm === 'Y') {
+            await graphModel.deleteGraph();
+            console.log('All graph data deleted.');
+          }
+          break;
+        }
+        case 'search': {
+          if (process.env.OPENAI_API_KEY) {
+            const search = await rl.question('Enter search string: ');
+            console.log(`Fulltext search for movies using: '${search}'`);
+            const results = await graphModel.fullTextQuery('Movie', search, 3);
+            console.log(results);
+          }
           break;
         }
         case 'query': {
           if (process.env.OPENAI_API_KEY) {
-            const search = await rl.question('Enter search string: ');
-            console.log(`Searching for movies related to: '${search}'`);
+            const search = await rl.question('Enter query string: ');
+            console.log(`Searching for movies similar to: '${search}'`);
             const results = await graphModel.similarityQuery('Movie', 'summary', search, 3);
             console.log(results);
           }

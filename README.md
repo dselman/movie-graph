@@ -4,87 +4,49 @@ description: Demo Graph DB
 tags:
   - Concerto
   - Neo4J
-  - Graph
+  - Concerto Graph
 ---
 
 # Movie Graph
 
-This project uses a [Concerto model](https://concerto.accordproject.org) to define the nodes and edges in a Neo4J graph database and uses the model to validate the properties on the nodes.
+    Create your own personal Movie Knowledge Graph using data from IMDB!
+
+This project uses [Concerto Graph](https://github.com/accordproject/lab-concerto-graph) to load
+data about Movies, actors, and plot summaries into a Neo4J graph database and then presents a
+command line interface to query the data using natural language.
 
 ![demo](demo.png)
-[Demo](src/demo/index.ts)
-
-In a few lines of code you can define a Concerto data model validated graph and perform a vector similarity search over
-nodes with text content.
-
-Concerto model (snippet):
-
-```
-concept Movie extends GraphNode {
-  @vector_index("summary", 1536, "COSINE")
-  o Double[] embedding optional
-  @embedding
-  o String summary optional
-  @label("IN_GENRE")
-  --> Genre[] genres optional
-}
-```
-
-TypeScript code:
-
-```typescript
-    await graphModel.mergeNode(transaction, `${NS}.Movie`, {identifier: 'Brazil', summary: 'The film centres on Sam Lowry, a low-ranking bureaucrat trying to find a woman who appears in his dreams while he is working in a mind-numbing job and living in a small apartment, set in a dystopian world in which there is an over-reliance on poorly maintained (and rather whimsical) machines'} );
-    
-    await graphModel.mergeNode(transaction, `${NS}.Genre`, {identifier: 'Comedy'} );
-    
-    await graphModel.mergeRelationship(transaction, `${NS}.Movie`, 'Brazil', `${NS}.Genre`, 'Comedy', 'genres' );
-    
-    await graphModel.mergeNode(transaction, `${NS}.Director`, {identifier: 'Terry Gilliam'} );
-    await graphModel.mergeRelationship(transaction, `${NS}.Director`, 'Terry Gilliam', `${NS}.Movie`, 'Brazil', 'directed' );
-    
-    await graphModel.mergeNode(transaction, `${NS}.Actor`, {identifier: 'Jonathan Pryce'} );
-    await graphModel.mergeRelationship(transaction, `${NS}.Actor`, 'Jonathan Pryce', `${NS}.Movie`, 'Brazil', 'actedIn' );
-    
-    const search = 'Working in a boring job and looking for love.';
-    const results = await graphModel.similarityQuery(`${NS}.Movie`, 'embedding', search, 3);
-```
-
-Runtime result:
-
-```json
-[
-  {
-    identifier: 'Brazil',
-    content: 'The film centres on Sam Lowry, a low-ranking bureaucrat trying to find a woman who appears in his dreams while he is working in a mind-numbing job and living in a small apartment, set in a dystopian world in which there is an over-reliance on poorly maintained (and rather whimsical) machines',
-    score: 0.901830792427063
-  }
-]
-```
+[Code](src/index.ts)
 
 ## Install
 
 ### Download IMDB Data
 
-Download the following (non-commercial) data sets from [IMDB](https://developer.imdb.com/non-commercial-datasets/):
+Download the following data sets (free for non-commercial use) from [IMDB](https://developer.imdb.com/non-commercial-datasets/):
 - title.basics
 - name.basics
 - title.principals
 - title.ratings
 
-Each file is a zipped tsv (tab-separated-values) file.
+Each file is a zipped tsv (tab-separated-values) file. Save the files in the ./imdb folder.
 
 ### Download Wiki Movie Plots CSV
 
-> Kaggle account is required
+The plot summaries for a selection of movies (not all) are not part of the public IMDB data sets so must be downloaded separately from Kaggle.
+
+> A (free) Kaggle account is required
 
 https://www.kaggle.com/datasets/jrobischon/wikipedia-movie-plots
 
+Save the downloaded csv file in the ./imdb folder.
 
 ### Load Data Into SQLite
 
 > Note that on Mac OS X SQLite is installed by default. On other platforms you may have to install it manually.
 
-```
+Launch SQLite:
+
+```bash
 sqlite3 im.db
 ```
 
@@ -108,11 +70,20 @@ create index names_primaryName on names(primaryName);
 create index principals_name on principals(nconst);
 ```
 
-You should now have an ±8GB SQLite database containing most of the IMDB data, indexed for retrieval.
+You should now have an ±8GB SQLite database containing most of the IMDB data, indexed for retrieval,
+and ready to be inserted into your Knowledge Graph.
 
-## Environment Variables
+## Set Environment Variables
 
-Export the following environment variables to your shell.
+Export the following environment variables to your shell. 
+
+Unix:
+
+```bash
+export NEO4J_URL=YOUR_URL
+export NEO4J_PASS=YOUR_PASS
+export OPENAI_API_KEY=YOUR_API_KEY
+```
 
 ### GraphDB
 
@@ -120,18 +91,19 @@ Export the following environment variables to your shell.
 - NEO4J_PASS: your neo4j password.
 - NEO4J_USER: <optional> defaults to `neo4j`
 
-### Text Embeddings
+### Text Embeddings & Chat With Data
 - OPENAI_API_KEY: <optional> the OpenAI API key. If not set embeddings are not computed and written to the agreement graph and similarity search is not possible.
 
 ## Running
 
-```
+```bash
 npm start
 ```
 
 Then use the following commands:
 - add: adds all the movies related to a specific person to the graph database
 - delete: deletes all nodes from the graph database
-- query: similarity conceptual search over movie nodes
-- chat: converts natural language queries to graph queries
+- search: full text search over movie nodes
+- query: similarity (conceptual) search over movie nodes
+- other: converts natural language queries to graph queries and runs them
 - quit: to exit
