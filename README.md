@@ -18,6 +18,36 @@ command line interface to query the data using natural language.
 ![demo](demo.png)
 [Code](src/index.ts)
 
+```
+Enter command (add,search,query,delete,quit) or a natural language query: what are the names of the 3 highest rated films with Marilyn Monroe that include plot summaries that contain the word "marry"?
+
+Calling tool: get_embeddings
+Converting query with embeddings to Cypher...
+
+Generated Cypher: MATCH (p:Person {name: 'Marilyn Monroe'})-[:RELATED_TO]->(m:Movie)
+CALL db.index.fulltext.queryNodes('movie_fulltext', 'marry')
+YIELD node AS movie, score
+WHERE movie.identifier = m.identifier
+RETURN movie.title AS title, movie.averageRating AS rating
+ORDER BY rating DESC
+LIMIT 3
+
+[
+  {
+    "title": "Some Like It Hot",
+    "rating": 8.2
+  },
+  {
+    "title": "Gentlemen Prefer Blondes",
+    "rating": 7.1
+  },
+  {
+    "title": "Clash by Night",
+    "rating": 7
+  }
+]
+```
+
 ## Install
 
 ### Download IMDB Data
