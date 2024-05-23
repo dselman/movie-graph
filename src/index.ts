@@ -1,6 +1,6 @@
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { GraphModel, GraphModelOptions, getOpenAiEmbedding } from '@accordproject/concerto-graph';
+import { Conversation, GraphModel, GraphModelOptions, getOpenAiEmbedding } from '@accordproject/concerto-graph';
 import Database from 'better-sqlite3';
 
 /**
@@ -179,11 +179,12 @@ async function run() {
 
   const stmt = db.prepare(SELECT_TITLES_BY_PARTICIPANT);
 
+  let convo = new Conversation(graphModel);
   let done = false;
   const rl = readline.createInterface({ input, output });
   while (!done) {
     try {
-      const command = await rl.question('Enter command (add,search,query,delete,quit) or a natural language query: ');
+      const command = await rl.question('Enter command (add,search,query,delete,quit,reset) or just chat: ');
       switch (command) {
         case 'add': {
           const actor = await rl.question('Enter the name of a movie participant: ');
@@ -224,10 +225,17 @@ async function run() {
           }
           break;
         }
+        case 'reset': {
+          if (process.env.OPENAI_API_KEY) {
+            convo = new Conversation(graphModel);
+            console.log('Reset conversation');
+          }
+          break;
+        }
         default: {
           if (process.env.OPENAI_API_KEY) {
-            const results = await graphModel.chatWithData(command);
-            console.log(JSON.stringify(results, null, 2));
+            const result = await convo.appendUserMessage(command);
+            console.log(result);
           }
           break;
         }
