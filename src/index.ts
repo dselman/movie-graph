@@ -1,7 +1,19 @@
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { Conversation, GraphModel, GraphModelOptions, getOpenAiEmbedding } from '@accordproject/concerto-graph';
+import { ConsoleLogger, Conversation, GraphModel, GraphModelOptions, getOpenAiEmbedding } from '@accordproject/concerto-graph';
 import Database from 'better-sqlite3';
+
+/**
+ * List of people associated with the Dune movies.
+ */
+const DUNE_PEOPLE = ["David Lynch", "Denis Villeneuve", "Kyle MacLachlan", "Francesca Annis", 
+"Brad Dourif", "José Ferrer", "Linda Hunt",
+"Freddie Jones", "Richard Jordan", "Everett McGill", "Silvana Mangano", "Virginia Madsen",
+"Sting", "Kenneth McMillan", "Jack Nance", "Siân Phillips", "Jürgen Prochnow",
+"Paul L. Smith", "Patrick Stewart", "Dean Stockwell", "Max von Sydow", "Alicia Witt",
+"Sean Young", "Timothée Chalamet", "Rebecca Ferguson", "Oscar Isaac", "Josh Brolin",
+"Stellan Skarsgård", "Dave Bautista", "Stephen McKinley Henderson", "Zendaya", "David Dastmalchian",
+"Chang Chen", "Sharon Duncan-Brewster", "Charlotte Rampling", "Jason Momoa", "Javier Bardem"];
 
 /**
  * The SQL query that joins across the various tables
@@ -143,14 +155,17 @@ async function addRowToGraph(graphModel: GraphModel, row: ImdbRow) {
       deathYear: row.deathYear ? row.deathYear !== "\\N" ? parseInt(row.deathYear) : null : null,
     });
     await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Movie', row.tconst, 'movies');
-    const knownFor = row.knownForTitles.split(',');
+    const knownFor = row.knownForTitles.trim().split(',');
     for (let n = 0; n < knownFor.length; n++) {
       await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Movie', knownFor[n], 'knownFor');
     }
-    const primaryProfessions = row.primaryProfession.split(',');
+    const primaryProfessions = row.primaryProfession.trim().split(',');
     for (let n = 0; n < primaryProfessions.length; n++) {
-      await graphModel.mergeNode(transaction, 'Profession', { identifier: primaryProfessions[n] });
-      await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Profession', primaryProfessions[n], 'professions');
+      const profession = primaryProfessions[n];
+      if(profession && profession.length > 0) {
+        await graphModel.mergeNode(transaction, 'Profession', { identifier:  profession});
+        await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Profession', primaryProfessions[n], 'professions');  
+      }
     }
     console.log(`${row.primaryTitle} (${row.startYear})`)
   });
@@ -165,7 +180,7 @@ async function run() {
     NEO4J_USER: process.env.NEO4J_USER,
     NEO4J_PASS: process.env.NEO4J_PASS,
     NEO4J_URL: process.env.NEO4J_URL,
-    logger: console,
+    logger: ConsoleLogger,
     logQueries: false,
     embeddingFunction: process.env.OPENAI_API_KEY ? getOpenAiEmbedding : undefined
   }
@@ -184,15 +199,32 @@ async function run() {
   const rl = readline.createInterface({ input, output });
   while (!done) {
     try {
-      const command = await rl.question('Enter command (add,search,query,delete,quit,reset) or just chat: ');
+      const command = await rl.question('Enter command (dune,add,search,query,delete,quit,reset) or just chat: ');
       switch (command) {
         case 'add': {
           const actor = await rl.question('Enter the name of a movie participant: ');
-          console.log(`Loading IMDB data for movie participant: ${actor}`);
+          graphModel.options.logger?.log(`Loading IMDB data for movie participant: ${actor}`);
           const rows = stmt.all(actor);
-          console.log(`Found ${rows.length} titles.`);
+          graphModel.options.logger?.log(`Found ${rows.length} titles.`);
           for (let n = 0; n < rows.length; n++) {
             await addRowToGraph(graphModel, rows[n]);
+          }
+        }
+          break;
+        case 'dune': {
+          for (let n = 0; n < DUNE_PEOPLE.length; n++) {
+            const person = DUNE_PEOPLE[n];
+            graphModel.options.logger?.log(`Loading movies for ${person}...`);
+            const rows = stmt.all(person);
+            for (let i = 0; i < rows.length; i++) {
+              const row = rows[i];
+              try {
+                await addRowToGraph(graphModel, row);
+              }
+              catch(err) {
+                console.log(err);
+              }
+            }
           }
         }
           break;
@@ -200,10 +232,10 @@ async function run() {
           done = true;
           break;
         case 'delete': {
-          const confirm = await rl.question('Enter \'Y\' to confirm deletion of all data: ');
-          if(confirm === 'Y') {
+          const confirm = await rl.question('Enter \'Y\' to confirm deletion of all graph data: ');
+          if (confirm === 'Y') {
             await graphModel.deleteGraph();
-            console.log('All graph data deleted.');
+            graphModel.options.logger?.log('All graph data deleted.');
           }
           break;
         }
@@ -228,7 +260,7 @@ async function run() {
         case 'reset': {
           if (process.env.OPENAI_API_KEY) {
             convo = new Conversation(graphModel);
-            console.log('Reset conversation');
+            graphModel.options.logger?.log('Reset conversation');
           }
           break;
         }
