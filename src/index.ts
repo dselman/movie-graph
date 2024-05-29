@@ -6,14 +6,14 @@ import Database from 'better-sqlite3';
 /**
  * List of people associated with the Dune movies.
  */
-const DUNE_PEOPLE = ["David Lynch", "Denis Villeneuve", "Kyle MacLachlan", "Francesca Annis", 
-"Brad Dourif", "José Ferrer", "Linda Hunt",
-"Freddie Jones", "Richard Jordan", "Everett McGill", "Silvana Mangano", "Virginia Madsen",
-"Sting", "Kenneth McMillan", "Jack Nance", "Siân Phillips", "Jürgen Prochnow",
-"Paul L. Smith", "Patrick Stewart", "Dean Stockwell", "Max von Sydow", "Alicia Witt",
-"Sean Young", "Timothée Chalamet", "Rebecca Ferguson", "Oscar Isaac", "Josh Brolin",
-"Stellan Skarsgård", "Dave Bautista", "Stephen McKinley Henderson", "Zendaya", "David Dastmalchian",
-"Chang Chen", "Sharon Duncan-Brewster", "Charlotte Rampling", "Jason Momoa", "Javier Bardem"];
+const DUNE_PEOPLE = ["David Lynch", "Denis Villeneuve", "Kyle MacLachlan", "Francesca Annis",
+  "Brad Dourif", "José Ferrer", "Linda Hunt",
+  "Freddie Jones", "Richard Jordan", "Everett McGill", "Silvana Mangano", "Virginia Madsen",
+  "Sting", "Kenneth McMillan", "Jack Nance", "Siân Phillips", "Jürgen Prochnow",
+  "Paul L. Smith", "Patrick Stewart", "Dean Stockwell", "Max von Sydow", "Alicia Witt",
+  "Sean Young", "Timothée Chalamet", "Rebecca Ferguson", "Oscar Isaac", "Josh Brolin",
+  "Stellan Skarsgård", "Dave Bautista", "Stephen McKinley Henderson", "Zendaya", "David Dastmalchian",
+  "Chang Chen", "Sharon Duncan-Brewster", "Charlotte Rampling", "Jason Momoa", "Javier Bardem"];
 
 /**
  * The SQL query that joins across the various tables
@@ -74,7 +74,10 @@ namespace ${NS}
 import org.accordproject.graph@1.0.0.{GraphNode}
 
 concept Person extends GraphNode {
+  @vector_index("embedding", 1536, "COSINE")
+  @fulltext_index
   o String name
+  o Double[] embedding optional
   o Integer birthYear
   o Integer deathYear optional
   o String primaryProfession
@@ -106,6 +109,7 @@ concept Movie extends GraphNode {
   o String summary optional
   @label("IN_GENRE")
   --> Genre[] genres optional
+  o String wikiPage optional
 }
 `;
 
@@ -140,7 +144,8 @@ async function addRowToGraph(graphModel: GraphModel, row: ImdbRow) {
       startYear: parseInt(row.startYear),
       endYear: row.endYear ? row.endYear !== "\\N" ? parseInt(row.endYear) : null : null,
       runtimeMinutes: row.runtimeMinutes !== "\\N" ? parseInt(row.runtimeMinutes) : null,
-      summary: row.Plot ? row.Plot : undefined
+      summary: row.Plot ? row.Plot : undefined,
+      wikiPage: row['Wiki Page']
     });
     const genres = row.genres.split(',');
     for (let n = 0; n < genres.length; n++) {
@@ -162,9 +167,9 @@ async function addRowToGraph(graphModel: GraphModel, row: ImdbRow) {
     const primaryProfessions = row.primaryProfession.trim().split(',');
     for (let n = 0; n < primaryProfessions.length; n++) {
       const profession = primaryProfessions[n];
-      if(profession && profession.length > 0) {
-        await graphModel.mergeNode(transaction, 'Profession', { identifier:  profession});
-        await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Profession', primaryProfessions[n], 'professions');  
+      if (profession && profession.length > 0) {
+        await graphModel.mergeNode(transaction, 'Profession', { identifier: profession });
+        await graphModel.mergeRelationship(transaction, 'Person', row.nconst, 'Profession', primaryProfessions[n], 'professions');
       }
     }
     console.log(`${row.primaryTitle} (${row.startYear})`)
@@ -187,14 +192,20 @@ async function run() {
   const graphModel = new GraphModel([MODEL], options);
   await graphModel.connect();
   await graphModel.dropIndexes();
-  await graphModel.createConstraints();
-  await graphModel.createVectorIndexes();
-  await graphModel.createFullTextIndexes();
+  await graphModel.createIndexes();
   const db = new Database('im.db', { readonly: true, fileMustExist: true });
 
   const stmt = db.prepare(SELECT_TITLES_BY_PARTICIPANT);
+  const convoOptions = {
+    toolOptions: {
+      getById: true,
+      chatWithData: true,
+      fullTextSearch: true,
+      similaritySearch: true
+    }
+  };
 
-  let convo = new Conversation(graphModel);
+  let convo = new Conversation(graphModel, convoOptions);
   let done = false;
   const rl = readline.createInterface({ input, output });
   while (!done) {
@@ -221,7 +232,7 @@ async function run() {
               try {
                 await addRowToGraph(graphModel, row);
               }
-              catch(err) {
+              catch (err) {
                 console.log(err);
               }
             }
@@ -259,7 +270,7 @@ async function run() {
         }
         case 'reset': {
           if (process.env.OPENAI_API_KEY) {
-            convo = new Conversation(graphModel);
+            convo = new Conversation(graphModel, convoOptions);
             graphModel.options.logger?.log('Reset conversation');
           }
           break;
