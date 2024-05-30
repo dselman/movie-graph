@@ -181,16 +181,18 @@ async function run() {
   checkEnv('NEO4J_PASS');
   checkEnv('NEO4J_URL');
 
+  const logger = ConsoleLogger;
   const options: GraphModelOptions = {
     NEO4J_USER: process.env.NEO4J_USER,
     NEO4J_PASS: process.env.NEO4J_PASS,
     NEO4J_URL: process.env.NEO4J_URL,
-    logger: ConsoleLogger,
+    logger,
     logQueries: false,
     embeddingFunction: process.env.OPENAI_API_KEY ? getOpenAiEmbedding : undefined
   }
   const graphModel = new GraphModel([MODEL], options);
   await graphModel.connect();
+  await graphModel.mergeConcertoModels();
   await graphModel.dropIndexes();
   await graphModel.createIndexes();
   const db = new Database('im.db', { readonly: true, fileMustExist: true });
@@ -202,7 +204,9 @@ async function run() {
       chatWithData: true,
       fullTextSearch: true,
       similaritySearch: true
-    }
+    },
+    maxContextSize: 64000,
+    logger
   };
 
   let convo = new Conversation(graphModel, convoOptions);
