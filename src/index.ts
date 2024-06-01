@@ -76,8 +76,8 @@ import org.accordproject.graph@1.0.0.{GraphNode}
 
 @questions("How many people are in the database?", 
 "What year was Eva Green born?",
-"What movies is Kevin Bacon known for?",
-"What is the shortest path from Eva Green to Kevin Bacon?"
+"What is the shortest path from Eva Green to Kevin Bacon?",
+"Who directed both Johnny Depp and Jonathan Pryce, but not necessarily in the same movie?"
 )
 concept Person extends GraphNode {
   @vector_index("embedding", 1536, "COSINE")
@@ -101,10 +101,10 @@ concept Genre extends GraphNode {
 concept Profession extends GraphNode {
 }
 
-@questions("What people are related to the movie Dune 2021?", 
-"What is the highest rated movie about natural disasters released after 2000",
-"What is the longest movie that has more than 1000 votes?",
-"What is a movie set in the capital of France?"
+@questions("What is the highest rated movie about the theme of natural disasters released after 2000?",
+"What is the movie with the longest runtime with more than 1000 votes?",
+"What is a movie set in the capital of France?",
+"List 5 movie titles and ratings released in 2018, with more than 5000 votes, ordered by rating."
 )
 concept Movie extends GraphNode {
   o String title
